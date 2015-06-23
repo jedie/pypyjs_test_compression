@@ -1,6 +1,3 @@
 [submodule "pypyjs-release"]
 	path = pypyjs-release
 	url = https://github.com/pypyjs/pypyjs-release.git
-[submodule "js-jquery"]
-	path = js-jquery
-	url = https://github.com/henrya/js-jquery.git
