@@ -8,30 +8,50 @@ import zlib
 import shutil
 import time
 
-try:
-    from io import BytesIO # Py3
-except ImportError:
-    from StringIO import StringIO as BytesIO # Py2
-
 sys.stderr = sys.stdout # XXX: sync for PyCharm
 
 
-class Zlib(object):
-    def __init__(self, level=9):
+class TarGzCompressor(object):
+    SUFFIX=".tar.gz"
+
+    def __init__(self, level=9, filter_callback=None):
         self.level = level
+        self.filter_callback = filter_callback
 
     def get_info(self):
         return "zlib level=%i" % self.level
 
-    def compress(self, data):
-        return zlib.compress(data, self.level)
+    def tar_info_filter(self, tarinfo):
+        tarinfo.uname = tarinfo.gname = "root"
+        tarinfo.uid = tarinfo.gid = 0
+        # tarinfo.type = ???
+        # tarinfo.gname = ???
+        tarinfo.mode = 0x0777 # ???
 
-    def to_fileobj(self, data):
-        compressed_data = self.compress(data)
-        return len(compressed_data), BytesIO(compressed_data)
+        self.uncompressed_size += tarinfo.size
+        # print("add",tarinfo.size, tarinfo.name)
 
-    def filename_suffix(self):
-        return ".deflate"
+        if self.filter_callback is not None:
+            tarinfo = self.filter_callback(tarinfo)
+
+        return tarinfo
+
+    def compress(self, out_dir, tar_name, files_dir, files):
+        tar_name = tar_name + self.SUFFIX
+        out_filename = os.path.join(out_dir, tar_name)
+
+        self.uncompressed_size = 0
+        with tarfile.open(out_filename, mode="w:gz", compresslevel=self.level) as tar:
+            tar.ENCODING = "utf-8"
+
+            for file_name in files:
+                file_path = os.path.join(files_dir, file_name)
+                tar.add(file_path, arcname=file_name, filter=self.tar_info_filter)
+
+        uncompressed_size = self.uncompressed_size
+        compressed_size = os.stat(out_filename).st_size
+        return tar_name, uncompressed_size, compressed_size
+
 
 
 class ModuleCompressor(object):
@@ -107,32 +127,12 @@ class ModuleCompressor(object):
         total uncompressed size..: 1362.4 MB
         total compressed size....: 349.6 MB
         """
-        tar_name = "%s.tar.gz" % module_name
-        out_filename = os.path.join(self.download_dir, tar_name)
-        self.uncompressed_size = 0
-        with tarfile.open(out_filename, mode="w:gz", compresslevel=9) as tar:
-            tar.ENCODING = "utf-8"
-
-            # print(module_name, out_filename)
-            # print(module_name, pprint.pformat(files, indent=4))
-            for file_name in files:
-                file_path = os.path.join(self.modules_dir, file_name)
-
-                def filter_tarinfo(tarinfo):
-                    tarinfo.uname = tarinfo.gname = "root"
-                    tarinfo.uid = tarinfo.gid = 0
-                    # tarinfo.type = ???
-                    # tarinfo.gname = ???
-                    tarinfo.mode = 0x0777 # ???
-                    self.uncompressed_size += tarinfo.size
-                    # print("add",tarinfo.size, tarinfo.name)
-                    return tarinfo
-
-                tar.add(file_path, arcname=file_name, filter=filter_tarinfo)
-
-        uncompressed_size = self.uncompressed_size
-        compressed_size = os.stat(out_filename).st_size
-
+        tar_name, uncompressed_size, compressed_size = self.compressor.compress(
+            out_dir=self.download_dir,
+            tar_name=module_name,
+            files_dir=self.modules_dir,
+            files=files
+        )
         if uncompressed_size == 0:
             print(" *** ERROR!", tar_name)
         else:
@@ -228,7 +228,7 @@ class ModuleCompressor(object):
 
 
 if __name__ == "__main__":
-    compressor = Zlib(level=9)
+    compressor = TarGzCompressor(level=9)
 
     modules_dir = "pypyjs-release/lib/modules"
     out_dir="download"
