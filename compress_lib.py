@@ -26,7 +26,7 @@ class TarGzCompressor(object):
         tarinfo.uid = tarinfo.gid = 0
         # tarinfo.type = ???
         # tarinfo.gname = ???
-        tarinfo.mode = 0x0777 # ???
+        tarinfo.mode = 0o0777 # ???
 
         self.uncompressed_size += tarinfo.size
         # print("add",tarinfo.size, tarinfo.name)
