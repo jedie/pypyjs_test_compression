@@ -4,11 +4,8 @@ import os
 import json
 import sys
 import tarfile
-import zlib
 import shutil
 import time
-
-sys.stderr = sys.stdout # XXX: sync for PyCharm
 
 
 class TarGzCompressor(object):
@@ -28,7 +25,6 @@ class TarGzCompressor(object):
         # tarinfo.gname = ???
         tarinfo.mode = 0o0777 # ???
 
-        self.uncompressed_size += tarinfo.size
         # print("add",tarinfo.size, tarinfo.name)
 
         if self.filter_callback is not None:
@@ -36,21 +32,34 @@ class TarGzCompressor(object):
 
         return tarinfo
 
-    def compress(self, out_dir, tar_name, files_dir, files):
+    def compress(self, out_dir, tar_name, files_dir, files, verbose=False):
         tar_name = tar_name + self.SUFFIX
         out_filename = os.path.join(out_dir, tar_name)
 
-        self.uncompressed_size = 0
+        total_uncompressed_size = 0
         with tarfile.open(out_filename, mode="w:gz", compresslevel=self.level) as tar:
             tar.ENCODING = "utf-8"
 
             for file_name in files:
                 file_path = os.path.join(files_dir, file_name)
-                tar.add(file_path, arcname=file_name, filter=self.tar_info_filter)
+                file_size = os.stat(file_path).st_size
+                total_uncompressed_size += file_size
 
-        uncompressed_size = self.uncompressed_size
+                if verbose:
+                    sys.stdout.write("Compress %20r %7.1fMB ... " % (
+                        file_name, (file_size / 1024.0 / 1024.0)
+                    ))
+                    sys.stdout.flush()
+
+                start_time = time.time()
+                tar.add(file_path, arcname=file_name, filter=self.tar_info_filter)
+                duration = time.time() - start_time
+
+                if verbose:
+                    print("compressed in %.2fsec." % duration)
+
         compressed_size = os.stat(out_filename).st_size
-        return tar_name, uncompressed_size, compressed_size
+        return tar_name, total_uncompressed_size, compressed_size
 
 
 
@@ -59,10 +68,6 @@ class ModuleCompressor(object):
         self.modules_dir = modules_dir
         self.download_dir = out_dir
         self.compressor = compressor
-
-        if os.path.isdir(self.download_dir):
-            shutil.rmtree(self.download_dir) # Cleanup
-        os.makedirs(self.download_dir)
 
         self.index_file = os.path.join(self.modules_dir, "index.json")
         self.meta_file = os.path.join(self.modules_dir, "meta.json")
@@ -227,10 +232,56 @@ class ModuleCompressor(object):
         self.missing = meta["missing"]
 
 
+class VMCompressor(object):
+    def __init__(self, files_dir, files, out_dir, compressor):
+        self.files_dir = files_dir
+        self.files = files
+        self.out_dir=out_dir
+        self.compressor = compressor
+
+    def compress(self):
+        print("\ncreated archive files in..:", self.out_dir)
+        print("Used compression..........: %s" % self.compressor.get_info())
+        print("\n")
+
+        tar_name, uncompressed_size, compressed_size = self.compressor.compress(
+            out_dir=self.out_dir,
+            tar_name="pypyjs",
+            files_dir=self.files_dir,
+            files=self.files,
+            verbose=True,
+        )
+        if uncompressed_size == 0:
+            print(" *** ERROR!", tar_name)
+        else:
+            print("%4i files %7.1fMB -> %7.1fMB - ratio: %5.1f%% - %s" % (
+                len(self.files),
+                uncompressed_size / 1024.0 / 1024.0, compressed_size / 1024.0 / 1024.0,
+                (compressed_size / uncompressed_size * 100.0),
+                tar_name
+            ))
+        return uncompressed_size, compressed_size
+
+
 if __name__ == "__main__":
     compressor = TarGzCompressor(level=9)
-
-    modules_dir = "pypyjs-release/lib/modules"
     out_dir="download"
-    mc = ModuleCompressor(modules_dir, out_dir, compressor)
-    mc.compress()
+
+    if os.path.isdir(out_dir):
+        shutil.rmtree(out_dir) # Cleanup
+    os.makedirs(out_dir)
+
+    print("\n +++ Compress pypyjs vm init files: +++")
+    VMCompressor(
+        files_dir="pypyjs-release/lib",
+        files=["pypy.vm.js", "pypy.vm.js.mem"],
+        out_dir="download",
+        compressor=compressor
+    ).compress()
+
+    print("\n +++ Compress modules: +++")
+    ModuleCompressor(
+        modules_dir="pypyjs-release/lib/modules",
+        out_dir="download",
+        compressor=compressor
+    ).compress()
