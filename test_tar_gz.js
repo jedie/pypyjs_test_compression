@@ -44,12 +44,7 @@ $(document).ready(function() {
         print("\tcontent.....: " + head_stringify(f.data, 60));
     }
 
-    function get_module_archive(module_name) {
-        print("\nget_module_archive("+module_name+")");
-
-        var url="./download/"+module_name+".tar.gz"
-        print("url: '" + url + "'");
-
+    function get_archive(url) {
         GZip.load(
             url=url,
             onload=function(h) {
@@ -83,12 +78,20 @@ $(document).ready(function() {
             }
         );
     }
+    function get_module(module_name) {
+        print("\nget_module("+module_name+")");
 
-    var module_name = "HTMLParser";
-    get_module_archive(module_name);
+        var url="./download/"+module_name+".tar.gz";
+        print("url: '" + url + "'");
 
-//    get_module_archive("doesntexists");
+        get_archive(url);
+    }
 
-    var module_name = "MimeWriter";
-    get_module_archive(module_name);
+    // Test:
+    
+    get_archive(url="./download/pypyjs.tar.gz");
+
+    get_module(module_name = "HTMLParser");
+    get_module(module_name = "MimeWriter");
+//    get_module(module_name = "doesntexists");
 });
