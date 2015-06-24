@@ -60,8 +60,11 @@ $(document).ready(function() {
                 tar.parseTar(h.data.join(''));
 
                 var elapsed = new Date() - t;
-                print('deflated '+ h.outputSize +' bytes in ' + h.decompressionTime + ' ms');
-                print('parsed tar in ' + elapsed + ' ms');
+                print('deflated '+ h.outputSize +' bytes in ' + h.decompressionTime + ' ms - parsed tar in ' + elapsed + ' ms');
+
+                var duration = h.decompressionTime + elapsed;
+                var rate = (h.outputSize/1024/1024) / (duration/1000);
+                print("Data rate: " + rate.toFixed(1) + " MB/s");
 
                 tar.files.forEach(load_file);
             },
