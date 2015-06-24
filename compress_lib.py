@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+import lzma
 
 import os
 import json
@@ -6,6 +7,8 @@ import sys
 import tarfile
 import shutil
 import time
+import zipfile
+import zlib
 
 
 class TarGzCompressor(object):
@@ -16,7 +19,7 @@ class TarGzCompressor(object):
         self.filter_callback = filter_callback
 
     def get_info(self):
-        return "zlib level=%i" % self.level
+        return ".tar.gz with level=%i" % self.level
 
     def tar_info_filter(self, tarinfo):
         tarinfo.uname = tarinfo.gname = "root"
@@ -60,6 +63,60 @@ class TarGzCompressor(object):
 
         compressed_size = os.stat(out_filename).st_size
         return tar_name, total_uncompressed_size, compressed_size
+
+
+class ZipCompressor(object):
+    SUFFIX=".zip"
+    COMPRESSION=zipfile.ZIP_DEFLATED
+
+    def __init__(self, level=9):
+        self.level = level
+
+        # Ugly work-a-round: Currently it's not possible to set
+        # the compression level. It will be always used the default
+        # and that's -1
+        # see also:
+        #   http://bugs.python.org/issue21417
+        zlib.Z_DEFAULT_COMPRESSION = self.level
+
+    def get_info(self):
+        return "%s with level=%i" % (self.SUFFIX, self.level)
+
+    def compress(self, out_dir, tar_name, files_dir, files, verbose=False):
+        tar_name = tar_name + self.SUFFIX
+        out_filename = os.path.join(out_dir, tar_name)
+
+        total_uncompressed_size = 0
+        with zipfile.ZipFile(out_filename, mode="w", compression=self.COMPRESSION) as zip:
+            for file_name in files:
+                file_path = os.path.join(files_dir, file_name)
+                file_size = os.stat(file_path).st_size
+                total_uncompressed_size += file_size
+
+                if verbose:
+                    sys.stdout.write("Compress %20r %7.1fMB ... " % (
+                        file_name, (file_size / 1024.0 / 1024.0)
+                    ))
+                    sys.stdout.flush()
+
+                start_time = time.time()
+                zip.write(file_path, arcname=file_name)
+                duration = time.time() - start_time
+
+                if verbose:
+                    print("compressed in %.2fsec." % duration)
+
+        compressed_size = os.stat(out_filename).st_size
+        return tar_name, total_uncompressed_size, compressed_size
+
+
+class LzmaZipCompressor(ZipCompressor):
+    SUFFIX=".lzma.zip"
+    COMPRESSION=zipfile.ZIP_LZMA
+
+    def __init__(self, level=9):
+        self.level = level
+        lzma.PRESET_DEFAULT = 9 # FIXME: http://bugs.python.org/issue21417
 
 
 
@@ -264,24 +321,34 @@ class VMCompressor(object):
 
 
 if __name__ == "__main__":
-    compressor = TarGzCompressor(level=9)
     out_dir="download"
 
-    if os.path.isdir(out_dir):
-        shutil.rmtree(out_dir) # Cleanup
-    os.makedirs(out_dir)
+    # if os.path.isdir(out_dir):
+    #     shutil.rmtree(out_dir) # Cleanup
+    try:
+        os.makedirs(out_dir)
+    except FileExistsError:
+        pass
 
-    print("\n +++ Compress pypyjs vm init files: +++")
-    VMCompressor(
-        files_dir="pypyjs-release/lib",
-        files=["pypy.vm.js", "pypy.vm.js.mem"],
-        out_dir="download",
-        compressor=compressor
-    ).compress()
+    compressors = [
+        LzmaZipCompressor(level=9),
+        TarGzCompressor(level=9),
+        ZipCompressor(level=9),
+    ]
 
-    print("\n +++ Compress modules: +++")
-    ModuleCompressor(
-        modules_dir="pypyjs-release/lib/modules",
-        out_dir="download",
-        compressor=compressor
-    ).compress()
+    for compressor in compressors:
+        print("="*79)
+        print("\n +++ Compress pypyjs vm init files: +++")
+        VMCompressor(
+            files_dir="pypyjs-release/lib",
+            files=["pypy.vm.js", "pypy.vm.js.mem"],
+            out_dir="download",
+            compressor=compressor
+        ).compress()
+
+        print("\n +++ Compress modules: +++")
+        ModuleCompressor(
+            modules_dir="pypyjs-release/lib/modules",
+            out_dir="download",
+            compressor=compressor
+        ).compress()
