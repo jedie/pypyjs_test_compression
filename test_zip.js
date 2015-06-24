@@ -30,50 +30,60 @@ $(document).ready(function() {
         out.append(data+"\n");
     }
 
-    function load_file(f) {
-        /*
-        API: http://stuk.github.io/jszip/documentation/api_zipobject.html
-
-        asText() 	    string 	the content as an unicode string.
-        asBinary() 	    string 	the content as binary string.
-        asArrayBuffer()	ArrayBuffer 	need a compatible browser.
-        asUint8Array() 	Uint8Array 	need a compatible browser.
-        asNodeBuffer() 	nodejs Buffer 	need nodejs.
-        */
-
-//        print(JSON.stringify(f));
-        print("\n\tname........: " + f.name);
-        print("\tis dir......: " + f.dir);
-        print("\tmode........: " + f.unixPermissions);
-        print("\tlength......: " + f.length);
-        print("\tcontent.....: " + head_stringify(f.asText(), 60));
-    }
-
     function get_archive(url) {
+        print("Request url: '" + url + "'");
+
         JSZipUtils.getBinaryContent(url, function(err, data) {
           if(err) {
               print("Error:"+err);
           } else {
+              print("\nParse "+url);
 //              print("data type:" + typeof data);
 //              print("data:" + JSON.stringify(data));
 //              print("Parse a "+data.length+" Bytes.");
+
+              var total_size=0;
               var start_time = new Date;
 
               var zip = new JSZip(data);
               var files = zip.filter(function(){return true;});
 
+              for (f of files) {
+                /*
+                API: http://stuk.github.io/jszip/documentation/api_zipobject.html
+
+                asText() 	    string 	the content as an unicode string.
+                asBinary() 	    string 	the content as binary string.
+                asArrayBuffer()	ArrayBuffer 	need a compatible browser.
+                asUint8Array() 	Uint8Array 	    need a compatible browser.
+                asNodeBuffer() 	nodejs Buffer 	need nodejs.
+                */
+
+//                print(JSON.stringify(f));
+
+                var data=f.asUint8Array();
+
+//                print("\tname........: " + f.name);
+//                print("\tis dir......: " + f.dir);
+//                print("\tmode........: " + f.unixPermissions);
+//                print("\tlength......: " + data.length);
+//                print("\tcontent.....: " + head_stringify(data, 60));
+
+                total_size += data.length
+              }
+
               var duration = new Date() - start_time;
-              print("Parse a "+data.length+" Bytes zip file in " + duration + " ms.");
-              print("Contains "+files.length+" items:");
-              files.forEach(load_file);
+              var kb = total_size/1024;
+              var mb = kb/1024;
+              var rate = mb / (duration/1000);
+              print("Contains "+files.length+" items with uncompressed: " + kb.toFixed(1) + "KB");
+              print("Parsed .zip in " + duration + " ms - Data rate: " + rate.toFixed(1) + " MB/s");
           }
         });
     }
     function get_module(module_name) {
-        print("\nget_module("+module_name+")");
-
+        print("get_module("+module_name+")");
         var url="./download/"+module_name+".zip";
-        print("url: '" + url + "'");
 
         get_archive(url);
     }
@@ -84,5 +94,7 @@ $(document).ready(function() {
 
     get_module(module_name = "HTMLParser");
     get_module(module_name = "MimeWriter");
+
 //    get_module(module_name = "doesntexists");
+
 });
