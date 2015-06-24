@@ -11,6 +11,7 @@ import zipfile
 import zlib
 
 
+
 class TarGzCompressor(object):
     SUFFIX=".tar.gz"
 
@@ -130,7 +131,7 @@ class ModuleCompressor(object):
         self.meta_file = os.path.join(self.modules_dir, "meta.json")
         self.load_index()
 
-    def compress(self):
+    def compress(self, max_packages=None):
         # files, seen = self.get_module("UserDict")
         # print(files, seen)
         # return
@@ -158,7 +159,8 @@ class ModuleCompressor(object):
             total_files += len(files)
             total_archives += 1
 
-            if total_archives>20: break # only for developing!
+            if max_packages is not None and total_archives>=max_packages:
+                break # only for developing!
 
         duration = time.time() - start_time
 
@@ -338,17 +340,19 @@ if __name__ == "__main__":
 
     for compressor in compressors:
         print("="*79)
-        print("\n +++ Compress pypyjs vm init files: +++")
-        VMCompressor(
-            files_dir="pypyjs-release/lib",
-            files=["pypy.vm.js", "pypy.vm.js.mem"],
-            out_dir="download",
-            compressor=compressor
-        ).compress()
+        # print("\n +++ Compress pypyjs vm init files: +++")
+        # VMCompressor(
+        #     files_dir="pypyjs-release/lib",
+        #     files=["pypy.vm.js", "pypy.vm.js.mem"],
+        #     out_dir="download",
+        #     compressor=compressor
+        # ).compress()
 
         print("\n +++ Compress modules: +++")
         ModuleCompressor(
             modules_dir="pypyjs-release/lib/modules",
             out_dir="download",
             compressor=compressor
-        ).compress()
+        ).compress(
+            max_packages=40 # XXX: only for developing!
+        )
