@@ -1,3 +1,9 @@
 [submodule "pypyjs-release"]
 	path = pypyjs-release
 	url = https://github.com/pypyjs/pypyjs-release.git
+[submodule "jszip"]
+	path = jszip
+	url = https://github.com/Stuk/jszip.git
+[submodule "jszip-utils"]
+	path = jszip-utils
+	url = https://github.com/Stuk/jszip-utils.git
