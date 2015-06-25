@@ -214,6 +214,7 @@ GZip = {
           var s = xhr.responseText;
           try {
             var t = new Date;
+            h.size = s.length;
             if (!h) h = self.parseHeader(s);
             self.parseAllBody(s, h, onstream);
             self.parseFooter(s, h);
