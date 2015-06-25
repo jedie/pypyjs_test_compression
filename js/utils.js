@@ -1,12 +1,11 @@
 // based on code from http://stackoverflow.com/questions/8211744/convert-time-interval-given-in-seconds-into-more-human-readable-form
 function human_time(milliseconds) {
-    var temp = milliseconds / 1000;
-    var minutes = (temp %= 3600) / 60;
-    if (minutes>1) {
+    var seconds = milliseconds / 1000;
+    var minutes = seconds / 60;
+    if (minutes>=1) {
         return minutes.toFixed(1) + 'min.'
     }
-    var seconds = temp % 60;
-    if (seconds>1) {
+    if (seconds>=1) {
         return seconds.toFixed(1) + 'sec.'
     }
     return milliseconds + 'ms'
