@@ -5,6 +5,10 @@ pre {
     height: 85%;
     margin: 1em;
     padding: 1em;
+    font-size:1em;
+}
+td {
+    font-size:0.75em;
 }
 
 
