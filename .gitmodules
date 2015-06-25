@@ -10,3 +10,6 @@
 [submodule "pako"]
 	path = pako
 	url = https://github.com/nodeca/pako.git
+[submodule "jquery-ajax-native"]
+	path = jquery-ajax-native
+	url = https://github.com/acigna/jquery-ajax-native.git
