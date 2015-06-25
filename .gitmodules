@@ -7,3 +7,6 @@
 [submodule "jszip-utils"]
 	path = jszip-utils
 	url = https://github.com/Stuk/jszip-utils.git
+[submodule "pako"]
+	path = pako
+	url = https://github.com/nodeca/pako.git
