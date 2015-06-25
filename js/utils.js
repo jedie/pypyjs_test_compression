@@ -2,11 +2,11 @@
 function human_time(milliseconds) {
     var temp = milliseconds / 1000;
     var minutes = (temp %= 3600) / 60;
-    if (minutes) {
+    if (minutes>1) {
         return minutes.toFixed(1) + 'min.'
     }
     var seconds = temp % 60;
-    if (seconds) {
+    if (seconds>1) {
         return seconds.toFixed(1) + 'sec.'
     }
     return milliseconds + 'ms'
