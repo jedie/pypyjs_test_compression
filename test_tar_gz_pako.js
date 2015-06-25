@@ -54,15 +54,18 @@ $(document).ready(function() {
                 msg = "Decompress " + files.length + " files";
                 msg += " - " + compressed_kb.toFixed(1) + "KB";
                 msg += " to: " + uncompressed_kb.toFixed(1) + " KB";
-                msg += " in " + duration + " ms";
+                msg += " in " + human_time(duration);
                 msg += " - Data rate: " + rate.toFixed(1) + " MB/s"
                 print(msg);
 
                 total_duration = new Date()-total_start_time;
                 total_uncompressed_bytes += uncompressed_bytes;
-                var total_mb = total_uncompressed_bytes/1024/1024
+                var total_mb = total_uncompressed_bytes/1024/1024;
                 var total_rate=total_mb / (total_duration/1000);
-                print("total: "+total_mb.toFixed(2)+" MB in " + total_duration + " ms -> " + total_rate.toFixed(1) + " MB/s")
+                msg = "total: "+total_mb.toFixed(2)+" MB";
+                msg += " in " + human_time(total_duration);
+                msg += " -> " + total_rate.toFixed(1) + " MB/s";
+                print(msg);
             }
         });
     }
