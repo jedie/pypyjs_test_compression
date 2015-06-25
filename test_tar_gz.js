@@ -4,7 +4,9 @@ $(document).ready(function() {
         out.append(data+"\n");
     }
 
-    var VERBOSE=true;
+    var total_start_time;
+    var total_uncompressed_bytes;
+    var VERBOSE;
 
     function get_archive(url) {
         print("Request url: '" + url + "'");
@@ -56,6 +58,12 @@ $(document).ready(function() {
                 msg += " in " + duration + " ms";
                 msg += " - Data rate: " + rate.toFixed(1) + " MB/s"
                 print(msg);
+
+                total_duration = new Date()-total_start_time;
+                total_uncompressed_bytes += uncompressed_bytes;
+                var total_mb = total_uncompressed_bytes/1024/1024
+                var total_rate=total_mb / (total_duration/1000);
+                print("total: "+total_mb.toFixed(2)+" MB in " + total_duration + " ms -> " + total_rate.toFixed(1) + " MB/s")
             },
             onstream=function(h) {
 //                print("<small>" + url + " " + h.offset + " bytes downloaded...</small>");
@@ -71,14 +79,14 @@ $(document).ready(function() {
         );
     }
     function get_module(module_name) {
-        print("get_module("+module_name+")");
-        var url="./download/"+module_name+".tar.gz";
-        get_archive(url);
+        get_archive("./download/"+module_name+".tar.gz");
     }
 
     $("#go").on( "click", function() {
         out.text("");
         VERBOSE=$('#verbose').prop('checked');
+        total_uncompressed_bytes=0;
+        total_start_time=new Date();
 
         get_archive(url="./download/pypyjs.tar.gz");
         get_module(module_name = "HTMLParser");

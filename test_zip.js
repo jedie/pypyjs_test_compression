@@ -30,8 +30,9 @@ $(document).ready(function() {
         out.append(data+"\n");
     }
 
-//    var VERBOSE=true;
-    var VERBOSE=false;
+    var total_start_time;
+    var total_uncompressed_bytes;
+    var VERBOSE;
 
     function get_archive(url) {
         print("Request url: '" + url + "'");
@@ -82,29 +83,34 @@ $(document).ready(function() {
               if (VERBOSE) { print("</table>"); }
 
               var duration = new Date() - start_time;
-
-              var uncompressed_bytes = total_size
+              var uncompressed_bytes = total_size;
               var uncompressed_kb = uncompressed_bytes/1024;
               var rate = (uncompressed_kb/1024) / (duration/1000);
+
               msg = "Decompress " + files.length + " files";
               msg += " - " + compressed_kb.toFixed(1) + "KB";
               msg += " to: " + uncompressed_kb.toFixed(1) + " KB";
               msg += " in " + duration + " ms";
               msg += " - Data rate: " + rate.toFixed(1) + " MB/s"
               print(msg);
+
+              total_duration = new Date()-total_start_time;
+              total_uncompressed_bytes += uncompressed_bytes;
+              var total_mb = total_uncompressed_bytes/1024/1024
+              var total_rate=total_mb / (total_duration/1000);
+              print("total: "+total_mb.toFixed(2)+" MB in " + total_duration + " ms -> " + total_rate.toFixed(1) + " MB/s")
           }
         });
     }
     function get_module(module_name) {
-        print("get_module("+module_name+")");
-        var url="./download/"+module_name+".zip";
-
-        get_archive(url);
+        get_archive("./download/"+module_name+".zip");
     }
 
     $("#go").on( "click", function() {
         out.text("");
         VERBOSE=$('#verbose').prop('checked');
+        total_uncompressed_bytes=0;
+        total_start_time=new Date();
 
         get_archive(url="./download/pypyjs.zip");
         get_module(module_name = "HTMLParser");
