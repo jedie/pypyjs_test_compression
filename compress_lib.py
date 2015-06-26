@@ -14,13 +14,15 @@ import zlib
 
 class TarGzCompressor(object):
     SUFFIX=".tar.gz"
+    TAR_MODE="w:gz"
 
     def __init__(self, level=9, filter_callback=None):
         self.level = level
         self.filter_callback = filter_callback
+        self._tar_open_kwargs = {"compresslevel":self.level}
 
     def get_info(self):
-        return ".tar.gz with level=%i" % self.level
+        return "%s with level=%i" % (self.SUFFIX, self.level)
 
     def tar_info_filter(self, tarinfo):
         tarinfo.uname = tarinfo.gname = "root"
@@ -36,12 +38,13 @@ class TarGzCompressor(object):
 
         return tarinfo
 
-    def compress(self, out_dir, tar_name, files_dir, files, verbose=False):
-        tar_name = tar_name + self.SUFFIX
-        out_filename = os.path.join(out_dir, tar_name)
+    def compress(self, out_dir, archive_name, files_dir, files, verbose=False):
+        archive_name = archive_name + self.SUFFIX
+        out_filename = os.path.join(out_dir, archive_name)
 
         total_uncompressed_size = 0
-        with tarfile.open(out_filename, mode="w:gz", compresslevel=self.level) as tar:
+        total_start_time = time.time()
+        with tarfile.open(out_filename, mode=self.TAR_MODE, **self._tar_open_kwargs) as tar:
             tar.ENCODING = "utf-8"
 
             for file_name in files:
@@ -62,8 +65,36 @@ class TarGzCompressor(object):
                 if verbose:
                     print("compressed in %.2fsec." % duration)
 
+        total_duration = time.time() - total_start_time
         compressed_size = os.stat(out_filename).st_size
-        return tar_name, total_uncompressed_size, compressed_size
+        return archive_name, total_uncompressed_size, compressed_size, total_duration
+
+
+class LZMA_Hack(lzma.LZMAFile):
+    def __init__(self, *args, **kwargs):
+        # print("XXX", args, kwargs)
+        kwargs["format"] = lzma.FORMAT_ALONE # The legacy .lzma container format.
+        kwargs["check"] = lzma.CHECK_NONE # No integrity check like CRC or SHA
+        kwargs["filters"] = None # custom filter chains
+        # print("XXX", args, kwargs)
+        super(LZMA_Hack, self).__init__(*args, **kwargs)
+
+
+class TarLzmaCompressor(TarGzCompressor):
+    """
+    LZMA was added in Python 3.3 !
+    """
+    SUFFIX=".tar.xz"
+    TAR_MODE="w:xz"
+
+    def __init__(self, level=9, filter_callback=None):
+        self.level = level
+        self.filter_callback = filter_callback
+        self._tar_open_kwargs = {"preset":self.level}
+
+        # FIXME:
+        lzma.LZMAFile = LZMA_Hack
+
 
 
 class ZipCompressor(object):
@@ -83,11 +114,12 @@ class ZipCompressor(object):
     def get_info(self):
         return "%s with level=%i" % (self.SUFFIX, self.level)
 
-    def compress(self, out_dir, tar_name, files_dir, files, verbose=False):
-        tar_name = tar_name + self.SUFFIX
-        out_filename = os.path.join(out_dir, tar_name)
+    def compress(self, out_dir, archive_name, files_dir, files, verbose=False):
+        archive_name = archive_name + self.SUFFIX
+        out_filename = os.path.join(out_dir, archive_name)
 
         total_uncompressed_size = 0
+        total_start_time = time.time()
         with zipfile.ZipFile(out_filename, mode="w", compression=self.COMPRESSION) as zip:
             for file_name in files:
                 file_path = os.path.join(files_dir, file_name)
@@ -107,8 +139,9 @@ class ZipCompressor(object):
                 if verbose:
                     print("compressed in %.2fsec." % duration)
 
+        total_duration = time.time() - total_start_time
         compressed_size = os.stat(out_filename).st_size
-        return tar_name, total_uncompressed_size, compressed_size
+        return archive_name, total_uncompressed_size, compressed_size, total_duration
 
 
 class LzmaZipCompressor(ZipCompressor):
@@ -118,6 +151,7 @@ class LzmaZipCompressor(ZipCompressor):
     def __init__(self, level=9):
         self.level = level
         lzma.PRESET_DEFAULT = 9 # FIXME: http://bugs.python.org/issue21417
+
 
 
 
@@ -131,6 +165,15 @@ class ModuleCompressor(object):
         self.meta_file = os.path.join(self.modules_dir, "meta.json")
         self.load_index()
 
+        self.reset_stats()
+
+    def reset_stats(self):
+        self.total_files = 0
+        self.total_archives = 0
+        self.total_uncompressed_size = 0
+        self.total_compressed_size = 0
+        self.total_duration = 0
+
     def compress(self, max_packages=None):
         # files, seen = self.get_module("UserDict")
         # print(files, seen)
@@ -140,41 +183,12 @@ class ModuleCompressor(object):
         print("Used compression..........: %s" % self.compressor.get_info())
         print("\n")
 
-        total_files = 0
-        total_archives = 0
-        total_uncompressed_size = 0
-        total_compressed_size = 0
-        start_time = time.time()
         for module_name in sorted(self.modules.keys()):
-            files, seen = self.get_module(module_name)
-            if not files:
-                print("Skip:", module_name)
-                continue
-
-            uncompressed_size, compressed_size = self._compress_module(
-                module_name, files
-            )
-            total_uncompressed_size += uncompressed_size
-            total_compressed_size += compressed_size
-            total_files += len(files)
-            total_archives += 1
-
-            if max_packages is not None and total_archives>=max_packages:
+            self.compress_module(module_name)
+            if max_packages is not None and self.total_archives>=max_packages:
                 break # only for developing!
 
-        duration = time.time() - start_time
-
-        print("\nCompress %i files to %i archives in %isec." % (
-            total_files, total_archives, duration
-        ))
-        print("total uncompressed size..: %.1f MB" % (
-            total_uncompressed_size / 1024.0 / 1024.0
-        ))
-        print("total compressed size....: %.1f MB" % (
-            total_compressed_size / 1024.0 / 1024.0
-        ))
-
-    def _compress_module(self, module_name, files):
+    def compress_module(self, module_name, verbose=False):
         """
         create a common .tar.gz archive
 
@@ -191,22 +205,48 @@ class ModuleCompressor(object):
         total uncompressed size..: 1362.4 MB
         total compressed size....: 349.6 MB
         """
-        tar_name, uncompressed_size, compressed_size = self.compressor.compress(
+        if verbose:
+            print("Compress module '%s' with %s to %s" % (
+                module_name, self.compressor.get_info(), self.download_dir
+            ))
+
+        files, seen = self.get_module(module_name)
+        if not files:
+            print("Skip:", module_name)
+            return
+
+        archive_name, uncompressed_size, compressed_size, duration = self.compressor.compress(
             out_dir=self.download_dir,
-            tar_name=module_name,
+            archive_name=module_name,
             files_dir=self.modules_dir,
             files=files
         )
         if uncompressed_size == 0:
-            print(" *** ERROR!", tar_name)
+            print(" *** ERROR!", archive_name)
         else:
             print("%4i files %7.1fKB -> %7.1fKB - ratio: %5.1f%% - %s" % (
                 len(files),
                 uncompressed_size / 1024.0, compressed_size / 1024.0,
                 (compressed_size / uncompressed_size * 100.0),
-                tar_name
+                archive_name
             ))
-        return uncompressed_size, compressed_size
+
+        self.total_uncompressed_size += uncompressed_size
+        self.total_compressed_size += compressed_size
+        self.total_duration += duration
+        self.total_files += len(files)
+        self.total_archives += 1
+
+    def print_stats(self):
+        print("\nCompress %i files to %i archives in %isec." % (
+            self.total_files, self.total_archives, self.total_duration.duration
+        ))
+        print("total uncompressed size..: %.1f MB" % (
+            self.total_uncompressed_size / 1024.0 / 1024.0
+        ))
+        print("total compressed size....: %.1f MB" % (
+            self.total_compressed_size / 1024.0 / 1024.0
+        ))
 
     def _add_parent(self, module_name, files, seen):
         # Include the parent package, if any.
@@ -303,21 +343,21 @@ class VMCompressor(object):
         print("Used compression..........: %s" % self.compressor.get_info())
         print("\n")
 
-        tar_name, uncompressed_size, compressed_size = self.compressor.compress(
+        archive_name, uncompressed_size, compressed_size, duration = self.compressor.compress(
             out_dir=self.out_dir,
-            tar_name="pypyjs",
+            archive_name="pypyjs",
             files_dir=self.files_dir,
             files=self.files,
             verbose=True,
         )
         if uncompressed_size == 0:
-            print(" *** ERROR!", tar_name)
+            print(" *** ERROR!", archive_name)
         else:
             print("%4i files %7.1fMB -> %7.1fMB - ratio: %5.1f%% - %s" % (
                 len(self.files),
                 uncompressed_size / 1024.0 / 1024.0, compressed_size / 1024.0 / 1024.0,
                 (compressed_size / uncompressed_size * 100.0),
-                tar_name
+                archive_name
             ))
         return uncompressed_size, compressed_size
 
@@ -325,34 +365,53 @@ class VMCompressor(object):
 if __name__ == "__main__":
     out_dir="download"
 
-    # if os.path.isdir(out_dir):
-    #     shutil.rmtree(out_dir) # Cleanup
+    if os.path.isdir(out_dir):
+        print("rmtree", out_dir)
+        shutil.rmtree(out_dir) # Cleanup
     try:
         os.makedirs(out_dir)
     except FileExistsError:
         pass
 
     compressors = [
-        LzmaZipCompressor(level=9),
+        TarLzmaCompressor(
+            # level=1
+            level=9
+        ),
+        # LzmaZipCompressor(level=9), # There is not JS lib to decompress .zip with LZMA :(
         TarGzCompressor(level=9),
         ZipCompressor(level=9),
     ]
+    # compressors = [ # XXX: only for developing!
+    #     TarLzmaCompressor(level=1),
+    #     LzmaZipCompressor(level=1),
+    #     TarGzCompressor(level=1),
+    #     ZipCompressor(level=1),
+    # ]
 
     for compressor in compressors:
         print("="*79)
-        # print("\n +++ Compress pypyjs vm init files: +++")
-        # VMCompressor(
-        #     files_dir="pypyjs-release/lib",
-        #     files=["pypy.vm.js", "pypy.vm.js.mem"],
-        #     out_dir="download",
-        #     compressor=compressor
-        # ).compress()
+        print("\n +++ Compress pypyjs vm init files: +++")
+        VMCompressor(
+            files_dir="pypyjs-release/lib",
+            files=["pypy.vm.js", "pypy.vm.js.mem"],
+            out_dir="download",
+            compressor=compressor
+        ).compress()
 
         print("\n +++ Compress modules: +++")
-        ModuleCompressor(
+        mc = ModuleCompressor(
             modules_dir="pypyjs-release/lib/modules",
             out_dir="download",
             compressor=compressor
-        ).compress(
-            max_packages=40 # XXX: only for developing!
         )
+
+        # compress all modules
+        # mc.compress(
+        #     max_packages=10 # XXX: only for developing!
+        # )
+
+        # compress only the needed files for the JS-tests:
+        mc.compress_module(module_name = "HTMLParser")
+        mc.compress_module(module_name = "MimeWriter")
+
