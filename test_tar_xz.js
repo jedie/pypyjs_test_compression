@@ -17,20 +17,26 @@ $(document).ready(function() {
             xhrFields: {
               responseType: 'arraybuffer' // ("arraybuffer", "blob", "document", "json")
             },
+            fail: function(data) { print("fail:", data); },
+            error: function(data) { print("error:", data); },
             success: function(data) {
                 var request_duration = new Date() - request_start_time;
                 print("\n" + url + " loaded in " + human_time(request_duration));
 
                 // data == ArrayBuffer
-                print("result type: " + Object.prototype.toString.call(data));
+//              print("data type:" + Object.prototype.toString.call(data));
+              var data = new Uint8Array(data);
+//              print("data type:" + Object.prototype.toString.call(data));
+//              print("stringify:"+head_stringify(data, 60));
+//              print("Parse "+data.byteLength+" Bytes.");
 
-                var compressed_bytes = data.byteLength
+                var compressed_bytes = data.byteLength;
                 var compressed_kb = compressed_bytes/1024;
                 var start_time = new Date;
 
                 LZMA.decompress(data,
                     on_finish=function(data) {
-                        if (VERBOSE) { print("lzma decompress finish.") }
+                        if (VERBOSE) { print("lzma decompress "+url+" finish.") }
 
                         var files = untar(data);
 
@@ -70,16 +76,13 @@ $(document).ready(function() {
 
                     },
                     on_progress=function(percent) {
-                        if (VERBOSE) {
-                            print("Decompressing: " + (percent * 100) + "%");
-                        };
+//                        if (VERBOSE) {
+                        print("Decompressing: " + (percent * 100) + "%");
+//                        };
                     }
                 );
-
-
-
             }
-        });
+        })
     }
     function get_module(module_name) {
         get_archive("./download/"+module_name+".tar.xz");
@@ -91,8 +94,8 @@ $(document).ready(function() {
         total_uncompressed_bytes=0;
         total_start_time=new Date();
 
-//        get_archive(url="./download/pypyjs.tar.xz");
-//        get_module(module_name = "HTMLParser");
+        get_archive(url="./download/pypyjs.tar.xz");
+        get_module(module_name = "HTMLParser");
         get_module(module_name = "MimeWriter");
 //    get_module(module_name = "doesntexists");
     });
